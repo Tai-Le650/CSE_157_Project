@@ -18,6 +18,11 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 PROTECTED_KEYS = {"demo_mode"}
 
 
+def refuse_online(c: Container, what: str) -> None:
+    if c.config.hosted:
+        raise AppError("not_available_online", f"{what} is not available in the online demo. Run Gesture-to-PC on your own PC to use it.", 403)
+
+
 @router.get("", response_model=AppSettings, summary="Read persisted settings")
 def get_settings(c: Container) -> AppSettings:
     return c.settings.current
@@ -37,6 +42,7 @@ def patch_settings(body: SettingsPatch, c: Container) -> AppSettings:
 
 @router.post("/demo-mode", response_model=AppSettings, summary="Switch between real and Demo Mode", description="Disconnects all sensors, stops recognition and disarms PC control. Requires confirm=true and no active recording or training.")
 def set_demo_mode(body: DemoModeRequest, c: Container) -> AppSettings:
+    refuse_online(c, "Turning Demo Mode off")
     current = c.settings.current.demo_mode
     if body.enabled == current:
         return c.settings.current
@@ -76,6 +82,7 @@ def storage(c: Container) -> dict:
 
 @router.put("/storage", summary="Change the data directory (takes effect after restart)")
 def set_storage(body: StorageRequest, c: Container) -> dict:
+    refuse_online(c, "Changing the data folder")
     local = read_local_settings(c.paths.config_root)
     if body.data_dir:
         target = Path(body.data_dir).expanduser()

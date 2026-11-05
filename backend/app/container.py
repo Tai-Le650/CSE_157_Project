@@ -86,7 +86,7 @@ class AppContainer:
         self.activity.info("system", f"{APP_NAME} backend started on {self.config.host}:{self.config.port}", workspace=self.workspace())
         self._status_task = asyncio.create_task(self._status_loop())
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, blocking_in_thread: bool = False) -> None:
         self.control.disarm("shutdown")
         if self._status_task:
             self._status_task.cancel()
@@ -94,6 +94,14 @@ class AppContainer:
                 await self._status_task
             except asyncio.CancelledError:
                 pass
+        if blocking_in_thread:
+            await asyncio.to_thread(self._stop_services)
+        else:
+            self._stop_services()
+        await self.hub.stop()
+        self.engine.dispose()
+
+    def _stop_services(self) -> None:
         for extension in reversed(self.extensions):
             hook = getattr(extension, "on_shutdown", None)
             if hook:
@@ -103,8 +111,6 @@ class AppContainer:
                     pass
         self.control.stop()
         self.sensors.stop()
-        await self.hub.stop()
-        self.engine.dispose()
 
     async def _status_loop(self) -> None:
         while True:

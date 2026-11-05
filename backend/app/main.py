@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from typing import Iterable
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -21,8 +22,17 @@ API_DESCRIPTION = (
 )
 
 
+def include_routers(app: FastAPI, service_routers: Iterable[APIRouter]) -> None:
+    for router in (routes_system.router, routes_settings.router, routes_sensors.router, routes_sensors.demo_router, routes_control.router, *service_routers, routes_ws.router):
+        app.include_router(router)
+
+
 def create_app(config: AppConfig | None = None) -> FastAPI:
     config = config or AppConfig(paths=AppPaths.default())
+    if config.hosted:
+        from .hosting.app import create_hosted_app
+
+        return create_hosted_app(config)
     container = AppContainer(config)
     from .wiring import attach_services
 
@@ -48,8 +58,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         allow_credentials=False,
     )
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.allowed_hosts)
-    for router in (routes_system.router, routes_settings.router, routes_sensors.router, routes_sensors.demo_router, routes_control.router, *routers, routes_ws.router):
-        app.include_router(router)
+    include_routers(app, routers)
     if config.serve_frontend:
         mount_frontend(app, config)
     return app

@@ -22,15 +22,18 @@ What has been checked, how, and what is still unverified. Results with simulated
 
 The step-by-step checklist is in [hardware.md](hardware.md#hardware-verification-still-to-do). Record results here as they are done.
 
-## Automated checks (all passing on 2026-11-05)
+## Automated checks (all passing on 2026-11-05, after the online demo was added)
 
 | Suite | Command | Result |
 |---|---|---|
-| Backend | `.\.venv\Scripts\python.exe -m pytest` | **102 passed** (about 66 s) |
-| Frontend unit | `npm run test` | **31 passed** in 6 files |
+| Backend | `.\.venv\Scripts\python.exe -m pytest` | **121 passed** (about 69 s), including 19 online-demo tests |
+| Frontend unit | `npm run test` | **36 passed** in 6 files |
 | Type-check | `npm run typecheck` | clean (app, unit tests, end-to-end tests) |
-| Lint | `npm run lint` | 0 errors, 86 warnings (React hook style rules; the 5 `jsx-key` warnings are false positives for values inside keyed rows) |
-| End-to-end | `npm run e2e` | **15 passed** on Edge (about 1.5 min) |
+| Lint | `npm run lint` | 0 errors, 85 warnings (React hook style rules; the remaining `jsx-key` warnings are false positives for values inside keyed rows) |
+| End-to-end | `npm run e2e` | **16 passed** on Edge (about 1.9 min): 15 against the local app, 1 against the online demo |
+| Online demo under Render free-plan limits | `docker run --cpus 0.1 --memory 512m …` plus a scripted two-visitor workflow | Passed; numbers in [hosting.md](hosting.md#measured-on-the-free-plans-limits) |
+
+The first end-to-end run after the online-demo changes failed one recognition step while Docker Desktop was starting and building an image on the same PC (recognition processing took about 74 ms per window instead of about 12 ms). It passed twice afterwards on an otherwise idle PC.
 
 ### Backend tests by file
 
@@ -50,12 +53,15 @@ The step-by-step checklist is in [hardware.md](hardware.md#hardware-verification
 | `test_control.py` | 13 | Gate conditions, allowlist, disarmed never executes, cooldown, repeat, Emergency Stop clears the queue, idle never acts, session and hardware loss disarm, stale requests, Demo never builds the real backend, control state re-published after setting and mode changes |
 | `test_advanced.py` | 9 | Capabilities report honestly, cursor velocity and calibration, two-sensor sync measurement, dual-sensor capture, sound state machine and its real/Demo gate, DTW air-writing, performance endpoint |
 | `test_cli_preserved.py` | 4 | `collect.py`, `control.py`, `check_stream.py --help` still exit 0; the backend never imports the CLI scripts |
+| `test_hosted.py` | 19 | Online demo: private sandbox per visitor, resume by token, unknown tokens rejected (REST and WebSocket), same-origin only, local-only features refused, sandbox and sensor caps (per visitor, per address, site-wide), idle and maximum-age cleanup, sensors paused without an open tab, one training job site-wide, tree/fold/hop caps, recognition defaults for new sandboxes, every stateful route looks up a sandbox, start-up cleanup only touches sandbox folders, limits from environment variables, local mode never binds beyond 127.0.0.1 |
 
 ### End-to-end tests (Playwright, Edge)
 
 `01-pages.spec.ts` (real mode, fresh workspace): all 10 pages load without errors; the sidebar reaches every page; Sound Activation explains why it is unavailable; PC control is off by default and arming is refused with reasons; foreign origins (403) and missing tokens (401) are rejected.
 
 `02-demo-workflow.spec.ts` (Demo Mode): enable Demo Mode → allow PC control → connect a simulated sensor → live chart → record and save 2 trials in the recorder UI → add 24 more trials in two sessions → build a dataset in the Dataset Manager → train (grouped evaluation reported) → start Live Recognition and detect a simulated swipe → enable a mapping → arm (simulated) → a simulated action is logged, nothing real executed → Emergency Stop latches and disarms → Reset.
+
+`03-hosted.spec.ts` (online demo, `run.py --hosted` on port 8766): the online-demo banner links to the project; Settings has no Demo Mode switch or storage editor; a simulated sensor connects and the live chart draws; a second browser context gets a different sandbox token and an empty sandbox.
 
 ## Manual browser checks (Chrome, Demo and real mode)
 

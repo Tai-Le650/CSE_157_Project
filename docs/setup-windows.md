@@ -17,7 +17,7 @@ Gesture-to-PC runs entirely on this PC. One Python process (`backend\run.py`) se
 From PowerShell:
 
 ```powershell
-cd "C:\Users\taile\OneDrive\CSE 157\Project\XIAO_Gesture_Controller"
+cd "C:\Users\taile\OneDrive\CSE 157\Project\XIAO_Gesture_Controller (Interface)"
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
 cd frontend
 npm install
@@ -62,8 +62,12 @@ npm run e2e         # builds the frontend, then runs Playwright on Edge
 ```
 
 - `pytest` never runs `src\train.py` and never touches the real `data\` or `models\` folders. Tests marked `reference` read the three `imu_capture\recordings` files and are skipped if they are missing.
-- `npm run e2e` starts its own backend on port 8765, with data and models in `%TEMP%\gesture-to-pc-e2e\run-<timestamp>\`. It never touches `data\` or `models\`, and those temp folders can be deleted at any time.
+- `npm run e2e` starts its own backends: the local app on port 8765 and the online demo (`--hosted`, bound to 127.0.0.1) on port 8766, with data, models and sandboxes in `%TEMP%\gesture-to-pc-e2e\run-<timestamp>\`. It never touches `data\` or `models\`, and those temp folders can be deleted at any time. `npx playwright test --project=local` or `--project=hosted` runs one of them.
 - The end-to-end tests use Demo Mode only. They never arm real PC control.
+
+## Online demo
+
+`backend\run.py --hosted` runs the public, Demo-Mode-only website instead of the local app. [hosting.md](hosting.md) explains how it works, its limits, how to run it locally (with or without Docker), and how to deploy it to Render.
 
 ## Notes
 

@@ -11,6 +11,7 @@ import { SensorSelect, SimpleSelect } from '@/components/common/Pickers'
 import { DemoBadge, SensorStatusBadge, ToneBadge } from '@/components/common/StatusBadge'
 import { useAction, useAsync } from '@/hooks/useAsync'
 import { useAppState, useWorkspaceIsDemo } from '@/hooks/useAppState'
+import { useHosted } from '@/hooks/useSessionInfo'
 import { useTopicState } from '@/hooks/useTopic'
 import { api } from '@/services/api'
 import { count, dateTime, hz, ms, num, seconds } from '@/lib/format'
@@ -90,6 +91,8 @@ function ConnectRealCard() {
 
 function ConnectDemoCard() {
   const { sensors } = useAppState()
+  const { hosted, limits } = useHosted()
+  const maxRate = hosted && limits ? limits.max_demo_rate_hz : 500
   const [sensorId, setSensorId] = useState('1')
   const [rate, setRate] = useState(100)
   const [auto, setAuto] = useState(false)
@@ -106,8 +109,8 @@ function ConnectDemoCard() {
           <Field label="Sensor ID" hint="Saved as DEMO-<id>">
             <Input value={sensorId} onChange={(e) => setSensorId(e.target.value.trim())} maxLength={20} />
           </Field>
-          <Field label="Simulated rate (Hz)">
-            <NumberInput value={rate} onChange={setRate} min={20} max={500} />
+          <Field label="Simulated rate (Hz)" hint={hosted && limits ? `Up to ${maxRate} Hz online. The free server streams ${limits.max_streaming_sensors} sensors at once for all visitors together and pauses yours a minute after your last tab closes.` : undefined}>
+            <NumberInput value={rate} onChange={setRate} min={20} max={maxRate} />
           </Field>
           <Field label="Worn on">
             <SimpleSelect value={hand} onChange={setHand} options={HANDS} />

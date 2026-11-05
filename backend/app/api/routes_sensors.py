@@ -3,11 +3,12 @@ from __future__ import annotations
 import csv
 import io
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select
 
 from ..database.models import SensorRow
+from ..hosting.sandboxes import INACTIVE_SENSOR_STATUSES, active_sensors
 from ..schemas.sensors import ConnectRequest, DemoAutoRequest, DemoPerformRequest, SensorOut, SensorPatch
 from .deps import Container
 from .errors import AppError, conflict
@@ -28,6 +29,17 @@ def remember_sensor(c: Container, sensor_id: str, hand: str, port: str, baud: in
             row.workspace = workspace
 
 
+def check_online_sensor_limit(c: Container, request: Request) -> None:
+    if not c.config.hosted:
+        return
+    limit = c.config.hosted_limits.max_sensors
+    if active_sensors(c) >= limit:
+        raise conflict("sensor_limit_online", f"The online demo runs at most {limit} simulated sensors at a time. Disconnect one first.")
+    registry = getattr(request.app.state, "sandboxes", None)
+    if registry is not None:
+        registry.check_sensor_capacity()
+
+
 @router.get("", response_model=list[SensorOut], summary="Connected and recently connected sensors")
 def list_sensors(c: Container) -> list[dict]:
     return c.sensors.snapshot()
@@ -42,7 +54,10 @@ def known_sensors(c: Container) -> list[dict]:
 
 
 @router.post("", response_model=SensorOut, status_code=201, summary="Connect a sensor", description="Opens the COM port (or a simulated source in Demo Mode) and starts streaming. One owner per port.")
-def connect(body: ConnectRequest, c: Container) -> dict:
+def connect(body: ConnectRequest, c: Container, request: Request) -> dict:
+    if c.config.hosted and body.demo_rate_hz > c.config.hosted_limits.max_demo_rate_hz:
+        raise AppError("rate_limit_online", f"The online demo simulates at most {c.config.hosted_limits.max_demo_rate_hz:g} Hz", 422)
+    check_online_sensor_limit(c, request)
     baud = body.baud or c.settings.current.acquisition.default_baud
     demo_options = {"rate_hz": body.demo_rate_hz, "auto": body.demo_auto} if body.simulated else None
     session = c.sensors.connect(body.port, baud, body.sensor_id, body.hand, simulated=body.simulated, demo_options=demo_options)
@@ -72,7 +87,9 @@ def disconnect(sensor_id: str, c: Container) -> dict:
 
 
 @router.post("/{sensor_id}/reconnect", response_model=SensorOut, summary="Reconnect using the same port and settings")
-def reconnect(sensor_id: str, c: Container) -> dict:
+def reconnect(sensor_id: str, c: Container, request: Request) -> dict:
+    if c.config.hosted and c.sensors.get(sensor_id).status in INACTIVE_SENSOR_STATUSES:
+        check_online_sensor_limit(c, request)
     return c.sensors.describe(c.sensors.reconnect(sensor_id))
 
 

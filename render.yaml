@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: gesture-to-pc
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: GESTURE_TO_PC_PROJECT_URL
+        value: https://github.com/Tai-Le650/CSE_157_Project
+      - key: GESTURE_TO_PC_MAX_SANDBOXES
+        value: "3"
+      - key: GESTURE_TO_PC_MAX_SANDBOXES_PER_IP
+        value: "2"
+      - key: GESTURE_TO_PC_SANDBOX_IDLE_MINUTES
+        value: "10"
+      - key: GESTURE_TO_PC_SANDBOX_MAX_MINUTES
+        value: "60"
+      - key: GESTURE_TO_PC_MAX_STREAMING_SENSORS
+        value: "2"
+      - key: GESTURE_TO_PC_MAX_SENSORS
+        value: "2"
+      - key: GESTURE_TO_PC_MAX_DEMO_RATE_HZ
+        value: "120"
+      - key: GESTURE_TO_PC_MAX_TREES
+        value: "30"
+      - key: GESTURE_TO_PC_MAX_FOLDS
+        value: "3"
+      - key: GESTURE_TO_PC_MIN_HOP_S
+        value: "0.25"
+      - key: GESTURE_TO_PC_DEFAULT_THRESHOLD
+        value: "0.7"
+      - key: GESTURE_TO_PC_DEFAULT_SMOOTHING_K
+        value: "1"
+      - key: GESTURE_TO_PC_DEFAULT_DEBOUNCE_N
+        value: "1"

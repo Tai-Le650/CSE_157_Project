@@ -18,6 +18,21 @@ from .recordings.recorder import RecorderService
 from .recordings.sessions import SessionService
 from .sensors.sync import SyncService
 
+SERVICE_ROUTERS: tuple[APIRouter, ...] = (
+    routes_recordings.recorder,
+    routes_recordings.recordings,
+    routes_recordings.imports,
+    routes_recordings.labels,
+    routes_recordings.sessions,
+    routes_datasets.datasets,
+    routes_datasets.analysis,
+    routes_ml.training,
+    routes_ml.models,
+    routes_ml.recognition,
+    routes_ml.mappings,
+    routes_advanced.advanced,
+)
+
 
 def attach_services(c: AppContainer) -> list[APIRouter]:
     c.labels = LabelService(c.db, c.activity, c.workspace)
@@ -39,20 +54,7 @@ def attach_services(c: AppContainer) -> list[APIRouter]:
     c.control.prerequisites = lambda: arm_prerequisites(c)
     c.control.cooldown_provider = lambda: float(c.recognition.config.get("cooldown_s", c.settings.current.inference.cooldown_s)) if c.recognition.running else c.settings.current.inference.cooldown_s
     c.extensions.extend([c.recorder, c.training, c.recognition, c.sync, c.cursor, c.sound])
-    return [
-        routes_recordings.recorder,
-        routes_recordings.recordings,
-        routes_recordings.imports,
-        routes_recordings.labels,
-        routes_recordings.sessions,
-        routes_datasets.datasets,
-        routes_datasets.analysis,
-        routes_ml.training,
-        routes_ml.models,
-        routes_ml.recognition,
-        routes_ml.mappings,
-        routes_advanced.advanced,
-    ]
+    return list(SERVICE_ROUTERS)
 
 
 def arm_prerequisites(c: AppContainer) -> list[str]:

@@ -70,7 +70,7 @@ class AppPaths:
         )
 
     @classmethod
-    def for_tests(cls, base: Path, root: Path | None = None, reference_root: Path | None = None) -> "AppPaths":
+    def isolated(cls, base: Path, root: Path | None = None, reference_root: Path | None = None) -> "AppPaths":
         app_root = root or APP_ROOT
         return cls(
             root=app_root,
@@ -80,6 +80,10 @@ class AppPaths:
             reference_root=reference_root or base / "reference",
             config_root=base,
         )
+
+    @classmethod
+    def for_tests(cls, base: Path, root: Path | None = None, reference_root: Path | None = None) -> "AppPaths":
+        return cls.isolated(base, root, reference_root)
 
     @property
     def src_dir(self) -> Path:

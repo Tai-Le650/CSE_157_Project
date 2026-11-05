@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { AlertTriangle, FolderCog } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/common/PageHeader'
 import { SimpleSelect } from '@/components/common/Pickers'
 import { useAction, useAsync } from '@/hooks/useAsync'
 import { useAppState } from '@/hooks/useAppState'
+import { useHosted } from '@/hooks/useSessionInfo'
 import { useTheme } from '@/hooks/useTheme'
 import { api } from '@/services/api'
 import type { AppSettings } from '@/types/api'
@@ -18,6 +19,7 @@ type Draft = Omit<AppSettings, 'cursor' | 'sound'>
 
 export function SettingsPage() {
   const { settings, status, control } = useAppState()
+  const { hosted } = useHosted()
   const { setLocalTheme } = useTheme()
   const storage = useAsync(() => api.settings.storage(), [])
   const capabilities = useAsync(() => api.advanced.capabilities(), [settings?.demo_mode])
@@ -51,10 +53,17 @@ export function SettingsPage() {
     setDraft({ ...draft, [section]: { ...(draft[section] as object), ...value } as Draft[K] })
   }
   const soundAvailable = capabilities.data?.sound_activation?.available ?? false
+  const aboutItems: [ReactNode, ReactNode][] = [
+    ['Application', `${status?.app ?? 'Gesture-to-PC'} ${status?.version ?? ''}`],
+    ['Backend address', hosted ? 'Online demo server (your sandbox is private and temporary)' : '127.0.0.1 only (not reachable from other computers)'],
+    ['Selected model', settings.selected_model_id ?? '—'],
+    ['Selected sensor', settings.selected_sensor_id ?? '—'],
+  ]
+  if (!hosted) aboutItems.push(['API documentation', <a key="api-docs" className="text-primary hover:underline" href="/docs" target="_blank" rel="noreferrer">/docs (OpenAPI)</a>])
 
   return (
     <>
-      <PageHeader title="Settings" description="Persisted in data/app.db. Settings that the hardware or firmware decide (such as the IMU sample rate) are measured, not configurable here." />
+      <PageHeader title="Settings" description={hosted ? 'Saved in your temporary demo sandbox. Settings that the hardware or firmware decide (such as the IMU sample rate) are measured, not configurable here.' : 'Persisted in data/app.db. Settings that the hardware or firmware decide (such as the IMU sample rate) are measured, not configurable here.'} />
       <div className="grid gap-5 xl:grid-cols-2">
         <Section title="Appearance">
           <RadioGroup value={settings.theme} onValueChange={(v) => { setLocalTheme(v as AppSettings['theme']); void run('theme', () => api.settings.patch({ theme: v })) }} className="flex gap-6">
@@ -65,13 +74,17 @@ export function SettingsPage() {
         </Section>
 
         <Section title="Mode">
-          <div className="space-y-3">
-            <label className="flex items-center justify-between gap-3 text-sm">
-              <span><b>Demo Mode</b> — simulated sensors only; every OS action is simulated; data and models are kept in a separate demo workspace</span>
-              <Switch checked={settings.demo_mode} onCheckedChange={(v) => setDemoConfirm(v)} />
-            </label>
-            <p className="text-xs text-muted-foreground">Switching disconnects all sensors, stops recognition and disarms PC control. It is refused while recording or training.</p>
-          </div>
+          {hosted ? (
+            <p className="text-sm"><b>Demo Mode</b> is always on in the online demo: sensors are simulated and every keyboard/mouse action is simulated. Real boards and real PC control need Gesture-to-PC running on your own PC.</p>
+          ) : (
+            <div className="space-y-3">
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span><b>Demo Mode</b> — simulated sensors only; every OS action is simulated; data and models are kept in a separate demo workspace</span>
+                <Switch checked={settings.demo_mode} onCheckedChange={(v) => setDemoConfirm(v)} />
+              </label>
+              <p className="text-xs text-muted-foreground">Switching disconnects all sensors, stops recognition and disarms PC control. It is refused while recording or training.</p>
+            </div>
+          )}
         </Section>
 
         <Section title="Acquisition" actions={<Button size="sm" variant="outline" onClick={() => save('acquisition', 'Acquisition')}>Save</Button>}>
@@ -133,7 +146,7 @@ export function SettingsPage() {
           </div>
         </Section>
 
-        <Section title={<span className="flex items-center gap-2"><FolderCog className="size-4" /> Storage</span>}>
+        {hosted ? null : <Section title={<span className="flex items-center gap-2"><FolderCog className="size-4" /> Storage</span>}>
           <div className="space-y-3">
             <KeyValue columns={1} items={[
               ['Data directory', storage.data?.data_dir ?? status?.data_dir ?? '—'],
@@ -147,16 +160,10 @@ export function SettingsPage() {
             </div>
             <p className="text-xs text-muted-foreground">The folder holds app.db, raw recordings, derivatives and exports. Keeping it inside OneDrive works, but OneDrive may briefly lock files while syncing.</p>
           </div>
-        </Section>
+        </Section>}
 
         <Section title="About">
-          <KeyValue columns={1} items={[
-            ['Application', `${status?.app ?? 'Gesture-to-PC'} ${status?.version ?? ''}`],
-            ['Backend address', '127.0.0.1 only (not reachable from other computers)'],
-            ['Selected model', settings.selected_model_id ?? '—'],
-            ['Selected sensor', settings.selected_sensor_id ?? '—'],
-            ['API documentation', <a className="text-primary hover:underline" href="/docs" target="_blank" rel="noreferrer">/docs (OpenAPI)</a>],
-          ]} />
+          <KeyValue columns={1} items={aboutItems} />
         </Section>
       </div>
       <ConfirmDialog

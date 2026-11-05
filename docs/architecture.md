@@ -74,6 +74,34 @@ Demo Mode is a separate workspace, not just a flag on the UI:
 - File paths from the browser are never accepted. Imports use known-source keys or uploads.
 - See [control-safety.md](control-safety.md) for how keyboard and mouse actions are gated.
 
+## Online demo (hosted mode)
+
+`backend\run.py --hosted` builds a different app (`backend/app/hosting/`) for the public website. Nothing above changes for the local app.
+
+| Part | Local app | Hosted mode |
+|---|---|---|
+| Backend state | One `AppContainer` in `app.state.container` | `SandboxRegistry` in `app.state.sandboxes`, one `AppContainer` per visitor, each with its own database and temp folder |
+| Finding the state | `get_container` returns the single container | `get_container` and the WebSocket look the container up by `X-Session-Token` / `?token=`; an unknown token gets 401 or close 1008 |
+| Listening address | `127.0.0.1` | `0.0.0.0` on `$PORT` (default 10000), behind Render's proxy |
+| Origin check | Fixed allowlist plus `TrustedHostMiddleware` | Same-origin: the `Origin` must match the request `Host` |
+| Session token | One per launch, required on state-changing requests | One per sandbox, required on every request that reads or changes sandbox data (GET included) |
+| Demo Mode | Optional | Forced on; turning it off, changing the data folder and trusting legacy models return 403 |
+| OS control and global hotkey | Enabled when armed in real mode | Disabled in the config, and PyAutoGUI is not installed in the image |
+
+A reaper task runs every 30 s:
+
+- It closes idle or too-old sandboxes: it closes their WebSockets with code 1008, shuts the container down in a worker thread (so waiting for threads and a training worker never blocks other visitors), and deletes the folder.
+- It pauses the simulated sensors of sandboxes that have had no open tab for a minute, because streaming sensors are what use the free plan's CPU.
+
+The other limits:
+
+- Training is limited to one job across all sandboxes.
+- Streaming simulated sensors are limited across all sandboxes.
+- Forest size, folds, recognition hop, sensor count per sandbox and simulated rate are capped.
+- New sandboxes start with recognition settings sized for the server.
+
+[hosting.md](hosting.md) lists the limits, the measurements behind them and how to deploy.
+
 ## Frontend (`frontend/src`)
 
 | Folder | Contents |

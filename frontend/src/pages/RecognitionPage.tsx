@@ -12,6 +12,7 @@ import { DemoBadge, ToneBadge } from '@/components/common/StatusBadge'
 import { ProbabilityBars } from '@/components/charts/Bars'
 import { useAction, useAsync } from '@/hooks/useAsync'
 import { useAppState, useWorkspaceIsDemo } from '@/hooks/useAppState'
+import { useHosted } from '@/hooks/useSessionInfo'
 import { useTopicState } from '@/hooks/useTopic'
 import { api } from '@/services/api'
 import { humanize, ms, num, pct, timeOfDay } from '@/lib/format'
@@ -35,6 +36,9 @@ export function RecognitionPage() {
   const [rearm, setRearm] = useState(inference?.require_idle_rearm ?? true)
   const { run, pending } = useAction()
   const running = recognition?.running ?? false
+  const { hosted, limits } = useHosted()
+  const minHop = hosted && limits ? limits.min_hop_s : 0.02
+  const effectiveHop = Math.max(hop, minHop)
 
   useEffect(() => {
     if (!modelId && settings?.selected_model_id) setModelId(settings.selected_model_id)
@@ -51,8 +55,8 @@ export function RecognitionPage() {
     return map
   }, [activeProfile])
 
-  const start = () => run('start', () => api.recognition.start({ model_id: modelId, sensor_id: sensorId, hop_s: hop, threshold, smoothing_k: smoothing, debounce_n: debounce, cooldown_s: cooldown, require_idle_rearm: rearm }), 'Recognition started')
-  const saveDefaults = () => run('defaults', () => api.settings.patch({ inference: { hop_s: hop, threshold, smoothing_k: smoothing, debounce_n: debounce, cooldown_s: cooldown, require_idle_rearm: rearm } }), 'Saved as defaults')
+  const start = () => run('start', () => api.recognition.start({ model_id: modelId, sensor_id: sensorId, hop_s: effectiveHop, threshold, smoothing_k: smoothing, debounce_n: debounce, cooldown_s: cooldown, require_idle_rearm: rearm }), 'Recognition started')
+  const saveDefaults = () => run('defaults', () => api.settings.patch({ inference: { hop_s: effectiveHop, threshold, smoothing_k: smoothing, debounce_n: debounce, cooldown_s: cooldown, require_idle_rearm: rearm } }), 'Saved as defaults')
 
   return (
     <>
@@ -70,8 +74,8 @@ export function RecognitionPage() {
               <Field label="Window (s)" hint="Set when the model was trained">
                 <div className="tabular flex h-9 items-center rounded-md border border-border bg-muted/40 px-3 text-sm">{windowS ?? '—'}</div>
               </Field>
-              <Field label="Hop (s)" hint={windowS ? `Overlap ${num(Math.max(0, windowS - hop), 2)} s (${pct(Math.max(0, windowS - hop) / windowS, 0)})` : undefined}>
-                <NumberInput value={hop} onChange={setHop} min={0.02} max={2} step={0.05} disabled={running} />
+              <Field label="Hop (s)" hint={windowS ? `Overlap ${num(Math.max(0, windowS - effectiveHop), 2)} s (${pct(Math.max(0, windowS - effectiveHop) / windowS, 0)})${hosted ? ` · at least ${minHop} s online` : ''}` : hosted ? `At least ${minHop} s in the online demo` : undefined}>
+                <NumberInput value={effectiveHop} onChange={setHop} min={minHop} max={2} step={0.05} disabled={running} />
               </Field>
             </div>
             <Field label={`Threshold: ${num(threshold, 2)}`} hint="Minimum smoothed probability for a non-idle detection">

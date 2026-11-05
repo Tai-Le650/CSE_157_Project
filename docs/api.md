@@ -17,6 +17,26 @@ The backend serves a typed REST API under `/api`. The interactive OpenAPI docume
 - **Workspaces.** Lists (recordings, sessions, datasets, models) only return items from the current mode (real or Demo).
 - **No file paths from the browser.** Imports use known-source keys (`GET /api/imports/known`) or uploads. Stored paths are always relative to a fixed base folder and checked so they cannot escape it.
 - **Units.** Stored samples keep the source units: acceleration in g, angular rate in deg/s, device time in microseconds.
+- **Online demo (`run.py --hosted`).** Every visitor gets a private sandbox (see [hosting.md](hosting.md)), with these differences:
+  - `GET /api/session` resumes the sandbox named by an `X-Session-Token` header, or creates a new one. The response adds `hosted: true` and `limits`; locally it returns `hosted: false` and `limits: null`.
+  - Every request that reads or changes sandbox data needs the token, GET included. Only `/api/session`, `/api/health` and a few fixed lists, such as the action allowlist, work without it. An unknown or expired token gets 401 `invalid_session_token`.
+  - An `Origin` header must match the request's own host.
+  - New error codes:
+
+    | Status | Code | When |
+    |---|---|---|
+    | 503 | `demo_full` | Every sandbox slot is taken |
+    | 429 | `too_many_sandboxes` | Too many sandboxes from one client address |
+    | 403 | `not_available_online` | Turning Demo Mode off, changing the data folder, trusting a legacy model |
+    | 409 | `server_busy` | Another visitor's training job is running |
+    | 409 | `server_busy_sensors` | The site-wide limit of streaming simulated sensors is reached |
+    | 409 | `sensor_limit_online` | Too many simulated sensors in this sandbox |
+    | 422 | `rate_limit_online` | Simulated rate above the online limit |
+
+  - Training requests are capped (trees, folds, one CPU core), and the recognition hop has a minimum.
+  - New sandboxes start with recognition settings sized for the server (`GET /api/settings` shows them).
+  - `/api/ports` returns an empty list.
+  - `/docs` is switched off.
 
 ## Routes
 
@@ -25,7 +45,7 @@ The backend serves a typed REST API under `/api`. The interactive OpenAPI docume
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | Liveness check |
-| GET | `/api/session` | Per-launch session token for this browser |
+| GET | `/api/session` | Per-launch session token for this browser (in the online demo: resume or create this visitor's sandbox) |
 | GET | `/api/status` | Current modes and system status |
 | GET | `/api/snapshot` | Full state snapshot (same as the WebSocket hello message) |
 | GET | `/api/activity` | Recent activity log entries |

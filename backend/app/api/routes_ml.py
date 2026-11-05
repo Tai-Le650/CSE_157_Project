@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Request, Response
 
 from ..control.actions import allowlist_description
 from ..ml.features.registry import FEATURES
 from ..ml.training import TrainingConfig
 from ..schemas.ml import ActiveProfile, ConfirmRequest, MappingUpsert, ModelPatch, ProfileCreate, ProfilePatch, RecognitionStart, SimulateRequest
 from .deps import Container
-from .errors import conflict
+from .errors import AppError, conflict
 
 training = APIRouter(prefix="/api/training", tags=["training"])
 models = APIRouter(prefix="/api/models", tags=["models"])
@@ -21,7 +21,10 @@ def features() -> list[dict]:
 
 
 @training.post("/jobs", status_code=201, summary="Start a background training job", description="Runs in a separate process. Evaluation uses grouped cross-validation (StratifiedGroupKFold by session, else recording). Progress streams on the 'training' WebSocket topic.")
-def start_job(body: TrainingConfig, c: Container) -> dict:
+def start_job(body: TrainingConfig, c: Container, request: Request) -> dict:
+    registry = getattr(request.app.state, "sandboxes", None)
+    if registry is not None:
+        return registry.start_training(c, body)
     return c.training.start(body)
 
 
@@ -64,6 +67,8 @@ def select_model(model_id: str, c: Container) -> dict:
 
 @models.post("/{model_id}/trust", summary="Trust a local legacy CLI model after confirmation (joblib can execute code)")
 def trust_model(model_id: str, body: ConfirmRequest, c: Container) -> dict:
+    if c.config.hosted:
+        raise AppError("not_available_online", "Trusting model files is not available in the online demo", 403)
     return c.registry.trust(model_id, body.confirm)
 
 
@@ -90,6 +95,9 @@ def state(c: Container) -> dict:
 @recognition.post("/start", summary="Start continuous recognition")
 def start(body: RecognitionStart, c: Container) -> dict:
     overrides = body.model_dump(exclude_none=True, exclude={"model_id", "sensor_id"})
+    if c.config.hosted:
+        hop = overrides.get("hop_s", c.settings.current.inference.hop_s)
+        overrides["hop_s"] = max(hop, c.config.hosted_limits.min_hop_s)
     return c.recognition.start(body.model_id, body.sensor_id, overrides)
 
 

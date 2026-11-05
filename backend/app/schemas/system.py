@@ -12,11 +12,30 @@ class HealthOut(BaseModel):
     time: float
 
 
+class HostedLimitsOut(BaseModel):
+    max_sandboxes: int
+    max_sandboxes_per_ip: int
+    idle_minutes: float
+    max_age_minutes: float
+    max_trees: int
+    max_folds: int
+    min_hop_s: float
+    max_sensors: int
+    max_streaming_sensors: int
+    max_demo_rate_hz: float
+    default_threshold: float
+    default_smoothing_k: int
+    default_debounce_n: int
+    project_url: str | None
+
+
 class SessionOut(BaseModel):
-    token: str = Field(description="Per-launch token. Send it as X-Session-Token on state-changing requests and as ?token= on /ws.")
+    token: str = Field(description="Per-launch token (per-visitor sandbox token in the online demo). Send it as X-Session-Token and as ?token= on /ws.")
     header: str
     websocket_path: str
     bind_host: str
+    hosted: bool = Field(False, description="True in the public online demo, where every visitor gets a private Demo Mode sandbox")
+    limits: HostedLimitsOut | None = Field(None, description="Online-demo limits; null when running locally")
 
 
 class ModesOut(BaseModel):

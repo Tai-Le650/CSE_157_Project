@@ -14,6 +14,7 @@ import { ToneBadge } from '@/components/common/StatusBadge'
 import { ConfusionMatrix } from '@/components/charts/Bars'
 import { useAction, useAsync } from '@/hooks/useAsync'
 import { useAppState, useWorkspaceIsDemo } from '@/hooks/useAppState'
+import { useHosted } from '@/hooks/useSessionInfo'
 import { api } from '@/services/api'
 import { dateTime, num, pct } from '@/lib/format'
 import type { Evaluation, ModelDetail, ModelSummary } from '@/types/api'
@@ -93,6 +94,8 @@ function EvaluationView({ evaluation, trainingData }: { evaluation: Evaluation |
 export function TrainingPage() {
   const { training } = useAppState()
   const isDemo = useWorkspaceIsDemo()
+  const { hosted, limits } = useHosted()
+  const online = hosted && limits ? limits : null
   const datasets = useAsync(() => api.datasets.list(), [isDemo])
   const features = useAsync(() => api.training.features(), [])
   const models = useAsync(() => api.models.list(), [isDemo, training?.recent[0]?.status])
@@ -128,6 +131,9 @@ export function TrainingPage() {
     { value: 'airwriting-dtw-v1', label: 'airwriting-dtw-v1 (experimental DTW)' },
   ], [features.data])
   const featureInfo = features.data?.find((f) => f.version === feature)
+  const effectiveTrees = online ? Math.min(trees, online.max_trees) : trees
+  const effectiveFolds = online ? Math.min(folds, online.max_folds) : folds
+  const effectiveJobs = online ? 1 : jobs
 
   const start = () =>
     run('train', () =>
@@ -136,11 +142,11 @@ export function TrainingPage() {
         feature_version: feature,
         window_s: feature === 'airwriting-dtw-v1' ? null : windowS,
         augment,
-        n_estimators: trees,
+        n_estimators: effectiveTrees,
         max_depth: maxDepth > 0 ? maxDepth : null,
         min_samples_leaf: leaf,
-        n_splits_max: folds,
-        n_jobs: jobs,
+        n_splits_max: effectiveFolds,
+        n_jobs: effectiveJobs,
         name: name || null,
       }), 'Training started in a background process')
 
@@ -165,12 +171,17 @@ export function TrainingPage() {
                 <Field label="Shift augmentation" hint="±0.12 s and ±0.25 s around each peak">
                   <div className="flex h-9 items-center"><Switch checked={augment} onCheckedChange={setAugment} disabled={feature !== 'stats-spectral-v1'} /></div>
                 </Field>
-                <Field label="Trees"><NumberInput value={trees} onChange={(v) => setTrees(Math.round(v))} min={10} max={2000} /></Field>
+                <Field label="Trees"><NumberInput value={effectiveTrees} onChange={(v) => setTrees(Math.round(v))} min={10} max={online?.max_trees ?? 2000} /></Field>
                 <Field label="Max depth" hint="0 = unlimited"><NumberInput value={maxDepth} onChange={(v) => setMaxDepth(Math.round(v))} min={0} max={100} /></Field>
                 <Field label="Min samples per leaf"><NumberInput value={leaf} onChange={(v) => setLeaf(Math.round(v))} min={1} max={50} /></Field>
-                <Field label="Max folds"><NumberInput value={folds} onChange={(v) => setFolds(Math.round(v))} min={2} max={10} /></Field>
-                <Field label="CPU cores" hint="Keep low while streaming"><NumberInput value={jobs} onChange={(v) => setJobs(Math.round(v))} min={1} max={8} /></Field>
+                <Field label="Max folds"><NumberInput value={effectiveFolds} onChange={(v) => setFolds(Math.round(v))} min={2} max={online?.max_folds ?? 10} /></Field>
+                <Field label="CPU cores" hint={online ? 'Always 1 in the online demo' : 'Keep low while streaming'}><NumberInput value={effectiveJobs} onChange={(v) => setJobs(Math.round(v))} min={1} max={8} disabled={Boolean(online)} /></Field>
               </div>
+            ) : null}
+            {online ? (
+              <Notice title="Online demo limits">
+                Forests are capped at {online.max_trees} trees and {online.max_folds} folds on 1 CPU core, and the free server trains one model at a time for all visitors, so training can take a few minutes.
+              </Notice>
             ) : null}
             <Field label="Model name (optional)"><Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} /></Field>
             <Button disabled={!datasetId || Boolean(active) || pending === 'train'} onClick={() => void start()}><Play /> Train model</Button>

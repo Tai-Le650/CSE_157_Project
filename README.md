@@ -7,7 +7,7 @@ This is a **starting prototype** for the CSE 157 hand-gesture/sound-activated co
 **Gesture-to-PC** is a local web app built on top of this prototype. It covers the whole workflow in the browser: connect sensors → live data → record trials → manage datasets → train → live recognition → map gestures to keyboard/mouse commands → PC control, with an always-visible Emergency Stop. It runs only on this PC (`127.0.0.1`), and the command-line tools below keep working unchanged.
 
 ```powershell
-cd "C:\Users\taile\OneDrive\CSE 157\Project\XIAO_Gesture_Controller"
+cd "C:\Users\taile\OneDrive\CSE 157\Project\XIAO_Gesture_Controller (Interface)"
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
 cd frontend; npm install; npm run build; cd ..
 .\scripts\start.ps1 -Open          # http://127.0.0.1:8000
@@ -17,10 +17,12 @@ cd frontend; npm install; npm run build; cd ..
 - **PC control is off by default.** It must be allowed in Settings and then armed explicitly; Emergency Stop works from the button, Shift+Esc, and Ctrl+Alt+Backspace while armed.
 - **One program per COM port:** close the CLI scripts and Arduino Serial Monitor before connecting a board in the app.
 - **Status:** the software is complete and tested (backend, frontend unit and end-to-end tests, Demo Mode), but it has **not yet been verified with a connected board**. Sound activation with real hardware and Bluetooth LE need firmware that does not exist yet.
+- **Online demo:** a Demo-Mode-only copy can run as a public website (`backend\run.py --hosted`), where every visitor gets a private, temporary sandbox with simulated sensors and simulated actions. It deploys to Render's free plan from `render.yaml` and `Dockerfile`. Real boards and real PC control only work in the local app. See [docs/hosting.md](docs/hosting.md).
 
 | Document | Contents |
 |---|---|
 | [docs/setup-windows.md](docs/setup-windows.md) | Install, run, development mode, tests |
+| [docs/hosting.md](docs/hosting.md) | Online demo: sandboxes, limits, deploying to Render, running it locally |
 | [docs/architecture.md](docs/architecture.md) | Components, threads, Demo Mode isolation, security |
 | [docs/hardware.md](docs/hardware.md) | Firmware facts, using boards, hardware checklist |
 | [docs/control-safety.md](docs/control-safety.md) | Arming, gate, allowlist, Emergency Stop, auto-disarm |

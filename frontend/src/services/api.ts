@@ -23,6 +23,7 @@ import type {
   RepairRecipe,
   SensorState,
   Session,
+  SessionInfo,
   SignalPreview,
   Snapshot,
   SoundState,
@@ -51,26 +52,128 @@ export class ApiError extends Error {
   }
 }
 
-let tokenPromise: Promise<string> | null = null
+const TOKEN_STORAGE_KEY = 'gesture-to-pc.session-token'
+const LOCAL_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]', '::1'])
 
-export function resetToken() {
-  tokenPromise = null
+let sessionPromise: Promise<SessionInfo> | null = null
+let currentSession: SessionInfo | null = null
+let sessionError: ApiError | null = null
+const sessionListeners = new Set<(info: SessionInfo) => void>()
+const replacedListeners = new Set<(info: SessionInfo) => void>()
+const sessionErrorListeners = new Set<(error: ApiError | null) => void>()
+
+function readStoredToken(): string | null {
+  try {
+    return window.localStorage.getItem(TOKEN_STORAGE_KEY)
+  } catch {
+    return null
+  }
 }
 
-export function getToken(): Promise<string> {
-  if (!tokenPromise) {
-    tokenPromise = fetch('/api/session', { cache: 'no-store' })
+function storeToken(token: string) {
+  try {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  } catch {
+    return
+  }
+}
+
+export function isHostedSite(): boolean {
+  if (currentSession) return currentSession.hosted
+  return typeof window !== 'undefined' && !LOCAL_HOSTNAMES.has(window.location.hostname)
+}
+
+function unreachableMessage(): string {
+  return isHostedSite() ? 'The online demo server is not reachable. It may be waking up, so try again in a minute.' : 'The backend is not reachable. Is backend\\run.py running?'
+}
+
+export function currentSessionInfo(): SessionInfo | null {
+  return currentSession
+}
+
+export function onSessionInfo(listener: (info: SessionInfo) => void): () => void {
+  sessionListeners.add(listener)
+  if (currentSession) listener(currentSession)
+  return () => {
+    sessionListeners.delete(listener)
+  }
+}
+
+export function onSessionReplaced(listener: (info: SessionInfo) => void): () => void {
+  replacedListeners.add(listener)
+  return () => {
+    replacedListeners.delete(listener)
+  }
+}
+
+export function currentSessionError(): ApiError | null {
+  return sessionError
+}
+
+export function onSessionError(listener: (error: ApiError | null) => void): () => void {
+  sessionErrorListeners.add(listener)
+  return () => {
+    sessionErrorListeners.delete(listener)
+  }
+}
+
+function setSessionError(error: ApiError | null) {
+  if (sessionError === error) return
+  sessionError = error
+  for (const listener of sessionErrorListeners) listener(error)
+}
+
+function acceptSession(info: SessionInfo) {
+  const previous = currentSession
+  currentSession = info
+  setSessionError(null)
+  storeToken(info.token)
+  for (const listener of sessionListeners) listener(info)
+  if (previous && info.hosted && previous.token !== info.token) {
+    for (const listener of replacedListeners) listener(info)
+  }
+}
+
+export function resetToken() {
+  sessionPromise = null
+}
+
+export function getSession(): Promise<SessionInfo> {
+  if (!sessionPromise) {
+    const stored = readStoredToken()
+    sessionPromise = fetch('/api/session', { cache: 'no-store', headers: stored ? { 'X-Session-Token': stored } : {} })
       .then(async (response) => {
-        if (!response.ok) throw new ApiError('session_unavailable', 'Could not reach the Gesture-to-PC backend', response.status)
-        const body = (await response.json()) as { token: string }
-        return body.token
+        const data = await parse(response)
+        if (!response.ok) {
+          const err = (data as { error?: { code?: string; message?: string; details?: unknown } } | undefined)?.error
+          const error = new ApiError(err?.code ?? 'session_unavailable', err?.message ?? 'Could not reach the Gesture-to-PC backend', response.status, err?.details)
+          setSessionError(error)
+          throw error
+        }
+        const body = data as Omit<SessionInfo, 'hosted' | 'limits'> & Partial<Pick<SessionInfo, 'hosted' | 'limits'>>
+        const info: SessionInfo = { ...body, hosted: body.hosted ?? false, limits: body.limits ?? null }
+        acceptSession(info)
+        return info
       })
-      .catch((error) => {
-        tokenPromise = null
+      .catch((error: unknown) => {
+        sessionPromise = null
         throw error
       })
   }
-  return tokenPromise
+  return sessionPromise
+}
+
+export function getToken(): Promise<string> {
+  return getSession().then((info) => info.token)
+}
+
+async function sessionToken(): Promise<string> {
+  try {
+    return await getToken()
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError('network_error', unreachableMessage(), 0)
+  }
 }
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
@@ -87,8 +190,7 @@ async function parse(response: Response): Promise<unknown> {
 }
 
 export async function request<T>(method: Method, path: string, body?: unknown, retry = true): Promise<T> {
-  const headers: Record<string, string> = {}
-  if (method !== 'GET') headers['X-Session-Token'] = await getToken()
+  const headers: Record<string, string> = { 'X-Session-Token': await sessionToken() }
   let payload: BodyInit | undefined
   if (body instanceof FormData) payload = body
   else if (body !== undefined) {
@@ -99,7 +201,7 @@ export async function request<T>(method: Method, path: string, body?: unknown, r
   try {
     response = await fetch(path, { method, headers, body: payload, cache: 'no-store' })
   } catch {
-    throw new ApiError('network_error', 'The backend is not reachable. Is backend\\run.py running?', 0)
+    throw new ApiError('network_error', unreachableMessage(), 0)
   }
   const data = await parse(response)
   if (!response.ok) {
@@ -114,8 +216,7 @@ export async function request<T>(method: Method, path: string, body?: unknown, r
 }
 
 export async function download(path: string, method: Method = 'GET', fallbackName = 'download'): Promise<void> {
-  const headers: Record<string, string> = {}
-  if (method !== 'GET') headers['X-Session-Token'] = await getToken()
+  const headers: Record<string, string> = { 'X-Session-Token': await sessionToken() }
   const response = await fetch(path, { method, headers })
   if (!response.ok) {
     const data = await parse(response)

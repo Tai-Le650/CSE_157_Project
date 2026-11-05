@@ -30,6 +30,32 @@ export interface SystemStatus {
   data_dir_is_default: boolean
 }
 
+export interface HostedLimits {
+  max_sandboxes: number
+  max_sandboxes_per_ip: number
+  idle_minutes: number
+  max_age_minutes: number
+  max_trees: number
+  max_folds: number
+  min_hop_s: number
+  max_sensors: number
+  max_streaming_sensors: number
+  max_demo_rate_hz: number
+  default_threshold: number
+  default_smoothing_k: number
+  default_debounce_n: number
+  project_url: string | null
+}
+
+export interface SessionInfo {
+  token: string
+  header: string
+  websocket_path: string
+  bind_host: string
+  hosted: boolean
+  limits: HostedLimits | null
+}
+
 export interface SensorError {
   code: string
   message: string
