@@ -1,0 +1,9 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["backend"]
+addopts = "-q"
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
+markers = [
+    "reference: read-only integration tests against the sibling imu_capture recordings (skipped when absent)",
+    "slow: tests that spawn a training process",
+]
